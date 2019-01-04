@@ -24,14 +24,15 @@ class DroneDataGenerator(ImageDataGenerator):
 
     For an example usage, see the evaluate.py script
     """
-    def flow_from_directory(self, directory, target_size=(224,224),
-            crop_size=(250,250), color_mode='grayscale', batch_size=32,
-            shuffle=True, seed=None, follow_links=False):
+
+    def flow_from_directory(self, directory, target_size=(224, 224),
+                            crop_size=(250, 250), color_mode='grayscale', batch_size=32,
+                            shuffle=True, seed=None, follow_links=False):
         return DroneDirectoryIterator(
-                directory, self,
-                target_size=target_size, crop_size=crop_size, color_mode=color_mode,
-                batch_size=batch_size, shuffle=shuffle, seed=seed,
-                follow_links=follow_links)
+            directory, self,
+            target_size=target_size, crop_size=crop_size, color_mode=color_mode,
+            batch_size=batch_size, shuffle=shuffle, seed=seed,
+            follow_links=follow_links)
 
 
 class DroneDirectoryIterator(Iterator):
@@ -64,9 +65,10 @@ class DroneDirectoryIterator(Iterator):
 
     # TODO: Add functionality to save images to have a look at the augmentation
     """
+
     def __init__(self, directory, image_data_generator,
-            target_size=(224,224), crop_size = (250,250), color_mode='grayscale',
-            batch_size=32, shuffle=True, seed=None, follow_links=False):
+                 target_size=(224, 224), crop_size=(250, 250), color_mode='grayscale',
+                 batch_size=32, shuffle=True, seed=None, follow_links=False):
         self.directory = directory
         self.image_data_generator = image_data_generator
         self.target_size = tuple(target_size)
@@ -104,47 +106,46 @@ class DroneDirectoryIterator(Iterator):
             self._decode_experiment_dir(subpath)
 
         # Conversion of list into array
-        self.ground_truth = np.array(self.ground_truth, dtype = K.floatx())
+        self.ground_truth = np.array(self.ground_truth, dtype=K.floatx())
 
         assert self.samples > 0, "Did not find any data"
 
         print('Found {} images belonging to {} experiments.'.format(
-                self.samples, self.num_experiments))
+            self.samples, self.num_experiments))
         super(DroneDirectoryIterator, self).__init__(self.samples,
-                batch_size, shuffle, seed)
+                                                     batch_size, shuffle, seed)
 
     def _recursive_list(self, subpath):
         return sorted(os.walk(subpath, followlinks=self.follow_links),
-                key=lambda tpl: tpl[0])
+                      key=lambda tpl: tpl[0])
 
     def _decode_experiment_dir(self, dir_subpath):
         # Load steerings or labels in the experiment dir
-        steerings_filename = os.path.join(dir_subpath, "sync_steering.txt")
-        labels_filename = os.path.join(dir_subpath, "labels.txt")
+        velocity_filename = os.path.join(dir_subpath, "velocity.txt")
+        direction_filename = os.path.join(dir_subpath, "direction.txt")
 
         # Try to load steerings first. Make sure that the steering angle or the
         # label file is in the first column. Note also that the first line are
         # comments so it should be skipped.
         try:
-            ground_truth = np.loadtxt(steerings_filename, usecols=0,
-                                  delimiter=',', skiprows=1)
+            ground_truth = np.loadtxt(velocity_filename, usecols=0, skiprows=1)
             exp_type = 1
         except OSError as e:
             # Try load collision labels if there are no steerings
             try:
-                ground_truth = np.loadtxt(labels_filename, usecols=0)
+                ground_truth = np.loadtxt(direction_filename, usecols={0, 1},
+                                          delimiter=',')
                 exp_type = 0
             except OSError as e:
                 print("Neither steerings nor labels found in dir {}".format(
-                dir_subpath))
+                    dir_subpath))
                 raise IOError
-
 
         # Now fetch all images in the image subdir
         image_dir_path = os.path.join(dir_subpath, "images")
         for root, _, files in self._recursive_list(image_dir_path):
             sorted_files = sorted(files,
-                    key = lambda fname: int(re.search(r'\d+',fname).group()))
+                                  key=lambda fname: int(re.search(r'\d+', fname).group()))
             for frame_number, fname in enumerate(sorted_files):
                 is_valid = False
                 for extension in self.formats:
@@ -154,11 +155,10 @@ class DroneDirectoryIterator(Iterator):
                 if is_valid:
                     absolute_path = os.path.join(root, fname)
                     self.filenames.append(os.path.relpath(absolute_path,
-                            self.directory))
+                                                          self.directory))
                     self.ground_truth.append(ground_truth[frame_number])
                     self.exp_type.append(exp_type)
                     self.samples += 1
-
 
     def next(self):
         with self.lock:
@@ -167,7 +167,7 @@ class DroneDirectoryIterator(Iterator):
         # so it can be done in parallel
         return self._get_batches_of_transformed_samples(index_array)
 
-    def _get_batches_of_transformed_samples(self, index_array) :
+    def _get_batches_of_transformed_samples(self, index_array):
         """
         Public function to fetch next batch.
 
@@ -178,11 +178,11 @@ class DroneDirectoryIterator(Iterator):
         # Image transformation is not under thread lock, so it can be done in
         # parallel
         batch_x = np.zeros((current_batch_size,) + self.image_shape,
-                dtype=K.floatx())
+                           dtype=K.floatx())
         batch_steer = np.zeros((current_batch_size, 2,),
-                dtype=K.floatx())
+                               dtype=K.floatx())
         batch_coll = np.zeros((current_batch_size, 2,),
-                dtype=K.floatx())
+                              dtype=K.floatx())
 
         grayscale = self.color_mode == 'grayscale'
 
@@ -190,9 +190,9 @@ class DroneDirectoryIterator(Iterator):
         for i, j in enumerate(index_array):
             fname = self.filenames[j]
             x = img_utils.load_img(os.path.join(self.directory, fname),
-                    grayscale=grayscale,
-                    crop_size=self.crop_size,
-                    target_size=self.target_size)
+                                   grayscale=grayscale,
+                                   crop_size=self.crop_size,
+                                   target_size=self.target_size)
 
             x = self.image_data_generator.random_transform(x)
             x = self.image_data_generator.standardize(x)
@@ -201,22 +201,22 @@ class DroneDirectoryIterator(Iterator):
             # Build batch of steering and collision data
             if self.exp_type[index_array[i]] == 1:
                 # Steering experiment (t=1)
-                batch_steer[i,0] =1.0
-                batch_steer[i,1] = self.ground_truth[index_array[i]]
+                batch_steer[i, 0] = 1.0
+                batch_steer[i, 1] = self.ground_truth[index_array[i]]
                 batch_coll[i] = np.array([1.0, 0.0])
             else:
                 # Collision experiment (t=0)
                 batch_steer[i] = np.array([0.0, 0.0])
-                batch_coll[i,0] = 0.0
-                batch_coll[i,1] = self.ground_truth[index_array[i]]
+                batch_coll[i, 0] = 0.0
+                batch_coll[i, 1] = self.ground_truth[index_array[i]]
 
         batch_y = [batch_steer, batch_coll]
         return batch_x, batch_y
 
 
 def compute_predictions_and_gt(model, generator, steps,
-                                     max_q_size=10,
-                                     pickle_safe=False, verbose=0):
+                               max_q_size=10,
+                               pickle_safe=False, verbose=0):
     """
     Generate predictions and associated ground truth
     for the input samples from a data generator.
@@ -277,8 +277,8 @@ def compute_predictions_and_gt(model, generator, steps,
 
         if not all_outs:
             for out in outs:
-            # Len of this list is related to the number of
-            # outputs per model(1 in our case)
+                # Len of this list is related to the number of
+                # outputs per model(1 in our case)
                 all_outs.append([])
 
         if not all_labels:
@@ -288,13 +288,12 @@ def compute_predictions_and_gt(model, generator, steps,
                 all_labels.append([])
                 all_ts.append([])
 
-
         for i, out in enumerate(outs):
             all_outs[i].append(out)
 
         for i, lab in enumerate(gt_lab):
-            all_labels[i].append(lab[:,1])
-            all_ts[i].append(lab[:,0])
+            all_labels[i].append(lab[:, 1])
+            all_ts[i].append(lab[:, 0])
 
         steps_done += 1
         if verbose == 1:
@@ -304,9 +303,8 @@ def compute_predictions_and_gt(model, generator, steps,
         return [out for out in all_outs], [lab for lab in all_labels], np.concatenate(all_ts[0])
     else:
         return np.squeeze(np.array([np.concatenate(out) for out in all_outs])).T, \
-                          np.array([np.concatenate(lab) for lab in all_labels]).T, \
-                          np.concatenate(all_ts[0])
-
+               np.array([np.concatenate(lab) for lab in all_labels]).T, \
+               np.concatenate(all_ts[0])
 
 
 def hard_mining_mse(k):
@@ -322,10 +320,10 @@ def hard_mining_mse(k):
 
     def custom_mse(y_true, y_pred):
         # Parameter t indicates the type of experiment
-        t = y_true[:,0]
+        t = y_true[:, 0]
 
         # Number of steering samples
-        samples_steer = tf.cast(tf.equal(t,1), tf.int32)
+        samples_steer = tf.cast(tf.equal(t, 1), tf.int32)
         n_samples_steer = tf.reduce_sum(samples_steer)
 
         if n_samples_steer == 0:
@@ -333,7 +331,7 @@ def hard_mining_mse(k):
         else:
             # Predicted and real steerings
             pred_steer = tf.squeeze(y_pred, squeeze_dims=-1)
-            true_steer = y_true[:,1]
+            true_steer = y_true[:, 1]
 
             # Steering loss
             l_steer = tf.multiply(t, K.square(pred_steer - true_steer))
@@ -342,12 +340,11 @@ def hard_mining_mse(k):
             k_min = tf.minimum(k, n_samples_steer)
             _, indices = tf.nn.top_k(l_steer, k=k_min)
             max_l_steer = tf.gather(l_steer, indices)
-            hard_l_steer = tf.divide(tf.reduce_sum(max_l_steer), tf.cast(k,tf.float32))
+            hard_l_steer = tf.divide(tf.reduce_sum(max_l_steer), tf.cast(k, tf.float32))
 
             return hard_l_steer
 
     return custom_mse
-
 
 
 def hard_mining_entropy(k):
@@ -363,10 +360,10 @@ def hard_mining_entropy(k):
 
     def custom_bin_crossentropy(y_true, y_pred):
         # Parameter t indicates the type of experiment
-        t = y_true[:,0]
+        t = y_true[:, 0]
 
         # Number of collision samples
-        samples_coll = tf.cast(tf.equal(t,0), tf.int32)
+        samples_coll = tf.cast(tf.equal(t, 0), tf.int32)
         n_samples_coll = tf.reduce_sum(samples_coll)
 
         if n_samples_coll == 0:
@@ -374,10 +371,10 @@ def hard_mining_entropy(k):
         else:
             # Predicted and real labels
             pred_coll = tf.squeeze(y_pred, squeeze_dims=-1)
-            true_coll = y_true[:,1]
+            true_coll = y_true[:, 1]
 
             # Collision loss
-            l_coll = tf.multiply((1-t), K.binary_crossentropy(true_coll, pred_coll))
+            l_coll = tf.multiply((1 - t), K.binary_crossentropy(true_coll, pred_coll))
 
             # Hard mining
             k_min = tf.minimum(k, n_samples_coll)
@@ -390,14 +387,13 @@ def hard_mining_entropy(k):
     return custom_bin_crossentropy
 
 
-
 def modelToJson(model, json_model_path):
     """
     Serialize model into json.
     """
     model_json = model.to_json()
 
-    with open(json_model_path,"w") as f:
+    with open(json_model_path, "w") as f:
         f.write(model_json)
 
 
@@ -411,10 +407,11 @@ def jsonToModel(json_model_path):
     model = model_from_json(loaded_model_json)
     return model
 
+
 def write_to_file(dictionary, fname):
     """
     Writes everything is in a dictionary in json model.
     """
     with open(fname, "w") as f:
-        json.dump(dictionary,f)
+        json.dump(dictionary, f)
         print("Written file {}".format(fname))
